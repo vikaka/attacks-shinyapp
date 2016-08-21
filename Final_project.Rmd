@@ -1,0 +1,447 @@
+---
+title: "Final Project"
+author: "Vishesh Kakarala"
+date: "August 15, 2016"
+output: html_document
+---
+
+##Contents
+
+
+
+
+
+
+#Introduction
+
+###Analysing terrorist attack data
+
+The aim of this project is to analyze terrorist attacks data. The analysis of the data consists of :
+ 
+ +Visualizing the data
+ 
+ +Understanding socio economic impact on occurance of attacks
+
+
+An important question today is if the frequency of terrorist attacks have increased throughout the world. A simple time series visualization of the attacks from 1971 to 2015 we can visually determine if the number of attacks have increased.
+
+
+From the visualization we can infer that the number of attacks have indeed increased but have historically been focused in the areas around the middle east and africa. Only a few sparse countries in the americas have been affected by terrorist attacks
+
+#Visualizing
+
+The data used for the analysis is obtained from the Gloabl Terrorism Database maintained by the university of maryland and the national consortium for the study of terrorism and responses to terrorism.
+
+The data is available to download in the .CSV format
+
+First we load all the libraries required for this excercise
+```{r warning= FALSE}
+library(dplyr) 
+library(ggplot2)
+library(rvest) 
+library(RMySQL)
+library(SparkR)
+library(leaflet)
+library(plyr)
+library(shiny)
+library(ggmap)
+library(maptools)
+library(maps)
+library(RMySQL)
+library(reshape)
+
+
+```
+
+The dataset is available in three separate tables
+```{r warning= FALSE}
+gtd_70to91_0616dist <- read.csv("gtd_70to91_0616dist.csv")
+gtd_12to15_0616dist <- read.csv("gtd_12to15_0616dist.csv")
+gtd_92to11_0616dist <- read.csv("gtd_92to11_0616dist.csv")
+
+# we extract only the information that we will be using from the tables for the visualization
+
+tomap1 <- data.frame(latitude = gtd_12to15_0616dist$latitude, longitude = gtd_12to15_0616dist$longitude, city = gtd_12to15_0616dist$city, nkill = gtd_12to15_0616dist$nkill
+           ,year = gtd_12to15_0616dist$iyear, month = gtd_12to15_0616dist$imonth, day = gtd_12to15_0616dist$iday,country = gtd_12to15_0616dist$country_txt,attack_type = gtd_12to15_0616dist$attacktype1_txt,at_summary = gtd_12to15_0616dist$summary)
+
+tomap2 <- data.frame(latitude = gtd_70to91_0616dist$latitude, longitude = gtd_70to91_0616dist$longitude, city = gtd_70to91_0616dist$city, nkill = gtd_70to91_0616dist$nkill
+,year = gtd_70to91_0616dist$iyear, month = gtd_70to91_0616dist$imonth, day = gtd_70to91_0616dist$iday,country = gtd_70to91_0616dist$country_txt,attack_type = gtd_70to91_0616dist$attacktype1_txt,at_summary = gtd_70to91_0616dist$summary)
+
+tomap3 <- data.frame(latitude = gtd_92to11_0616dist$latitude, longitude = gtd_92to11_0616dist$longitude, city = gtd_92to11_0616dist$city, nkill = gtd_92to11_0616dist$nkill
+,year = gtd_92to11_0616dist$iyear, month = gtd_92to11_0616dist$imonth, day = gtd_92to11_0616dist$iday,country = gtd_92to11_0616dist$country_txt,attack_type = gtd_92to11_0616dist$attacktype1_txt,at_summary = gtd_92to11_0616dist$summary)
+
+#The three tables are then merged to form one table with the relevant data
+
+tomap <- rbind(tomap1,tomap2,tomap3)
+tomap <-arrange(tomap,year)
+
+#We combine rows to create a popup column to show information about a particular attack in the visualization
+
+tomap$popup <- paste(sep = "<br>",tomap$city,
+                     tomap$attack_type,"<b>Total dead :</b>",tomap$nkill,tomap$at_summary)
+
+head(tomap)
+
+#We get aunique list of all the countries in the database
+
+countries <- as.character(unique(tomap$country))
+countries <-sort(countries, decreasing = FALSE)
+
+#the different types of attack are also extracted
+attack_type <- as.character(levels(tomap$attack_type))
+
+```
+
+
+Here I create the time series visualization using the data from the tables
+```{r eval = FALSE,warning= FALSE}
+visit.x <- tomap$longitude
+visit.y <- tomap$latitude
+intensity <- tomap$nkill
+
+
+
+tomap <-arrange(tomap,year)
+
+
+years <-unique(tomap$year)
+
+# for each year in the table(1970-2015) a singular visualization is created using ggmaps maps and maptools package. the output of the loop is stored in an external folder
+
+
+  for(j in 1:length(years))
+    {
+        visit.x <- tomap$longitude[tomap$year==years[j]]
+        visit.y <- tomap$latitude[tomap$year==years[j]]
+        intensity <- tomap$nkill[tomap$year==years[j]]
+        mp <- NULL
+        mapWorld <- borders("world", colour="gray50", fill="gray50") # create a layer of borders
+        mp <- ggplot() +   mapWorld
+        #now layer the attacks on top
+        mp <- mp+ geom_point(aes(x=visit.x, y=visit.y,size=intensity*1) ,color="lightblue",na.rm = TRUE,show.legend = FALSE) 
+        mp <- mp+ggtitle(years[j])
+        print(mp)
+        
+        dev.print(jpeg, file = paste("C:/Users/Vishesh Kakarala/Desktop/maps/mapplot",j,".jpeg",sep=""), width = 1200, height = 630)
+        
+      }  
+
+#Using ffmpeg the images a stitched together in cmd to obtain a single flowing visualization
+
+#ffmpeg -f image2 -framerate 1 -i mapplot%d.jpeg out.gif
+
+#The smae is repeated for different months of the year
+
+k<-1
+
+for(j in 1:length(years))
+{
+  for (i in 1:12)
+  {
+    visit.x <- tomap$longitude[tomap$year==years[j]&tomap$month== i]
+    visit.y <- tomap$latitude[tomap$year==years[j]&tomap$month== i]
+    intensity <- tomap$nkill[tomap$year==years[j]&tomap$month== i]
+    mp <- NULL
+    mapWorld <- borders("world", colour="gray50", fill="gray50") # create a layer of borders
+    mp <- ggplot() +   mapWorld
+    #now layer the attacks on top
+    mp <- mp+ geom_point(aes(x=visit.x, y=visit.y,size=intensity*1) ,color="lightblue",na.rm = TRUE,show.legend = FALSE) 
+    mp <- mp+ggtitle(paste(years[j],month.abb[i],sep=" "))
+    print(mp)
+    
+    dev.print(jpeg, file = paste("C:/Users/Vishesh Kakarala/Desktop/maps_months/mapplot",k,".jpeg",sep=""), width = 1200, height = 630)
+    k<-k+1
+  } 
+}
+
+
+```
+
+
+ 
+
+World bank data ETL
+ Using the world bank database, i extracted economic indicators for each country for the time period of the analysis 1970 - 2015
+ 
+```{r eval=FALSE,warning= FALSE}
+# connecting to MySQL server
+user <- "root"
+password <- "kakarala"
+dbname <- "attacks"
+host <- "localhost"
+
+mydb = dbConnect(MySQL(), user= user, password=password, dbname=dbname, host=host)
+
+dbListTables(mydb)
+
+Wb_data <- read.csv("~/Final/API_3_DS2_en_csv_v2.csv")
+
+colnames(Wb_data) <- c("Country.Name","Country.Code","Indicator.Name","Indicator.Code",
+                       1960,
+                       1961,
+                       1962,
+                       1963,
+                       1964,
+                       1965,
+                       1966,
+                       1967,
+                       1968,
+                       1969,
+                       1970,
+                       1971,
+                       1972,
+                       1973,
+                       1974,
+                       1975,
+                       1976,
+                       1977,
+                       1978,
+                       1979,
+                       1980,
+                       1981,
+                       1982,
+                       1983,
+                       1984,
+                       1985,
+                       1986,
+                       1987,
+                       1988,
+                       1989,
+                       1990,
+                       1991,
+                       1992,
+                       1993,
+                       1994,
+                       1995,
+                       1996,
+                       1997,
+                       1998,
+                       1999,
+                       2000,
+                       2001,
+                       2002,
+                       2003,
+                       2004,
+                       2005,
+                       2006,
+                       2007,
+                       2008,
+                       2009,
+                       2010,
+                       2011,
+                       2012,
+                       2013,
+                       2014,
+                       2015
+)
+
+# using R's reshape package i've changed the table structure to suit our analysis
+
+Wb_data <- melt(Wb_data,id.vars = c("Country.Name","Country.Code","Indicator.Name","Indicator.Code"))
+
+Wb_data <- cast(Wb_data, Country.Name+variable ~ Indicator.Code, mean, value = 'value')
+
+Wb_data <- as.data.frame(Wb_data)
+colnames(Wb_data[1]) <- "Country"
+
+# from the prveious tomap table i  have talen the relevant variables to join with the economic indicators
+indicators <- data.frame(tomap$latitude,tomap$longitude,tomap$nkill,dt_year = tomap$year,tomap$month,tomap$day,dt_country = tomap$country,tomap$attack_type)
+
+dbWriteTable(mydb,name="indicators",value = indicators,overwrite = TRUE)
+
+
+Wb_data$Country<- as.character(Wb_data$Country)
+Wb_data$Country<- iconv(Wb_data$Country, from = "", to = "UTF-8")
+
+
+dbWriteTable(mydb,name="Wb_data",value = Wb_data,overwrite = TRUE)
+
+#both the World bank data and the attack data tables are then loaded into MySQL Db to perform a join and standard statistical analysis
+```
+ 
+SQL queries
+```{r eval = FALSE, warning= FALSE}
+use attacks;
+
+# The following query is used to join the two tables to get the desired table data
+>SELECT 	*  FROM indicators
+>left JOIN wb_data on indicators.dt_country = wb_data.Country AND indicators.dt_year = >wb_data.variable;
+```
+The data is then loaded back in R.
+
+```{r echo=FALSE, warning= FALSE}
+joined <- read.csv("C:/Users/Vishesh Kakarala/Desktop/joined.csv")
+
+head(joined)
+```
+
+From the indicator data we can also get a summary table for visualization and analysis
+```{r eval =FALSE,warning= FALSE}
+>SELECT a.*,b.lat,b.lon FROM(SELECT dt_country,`tomap.attack_type`,dt_year, COUNT(*) AS >total_events,ROUND(SUM(`tomap.nkill`)) AS killed, COUNT(*)/ROUND(SUM(`tomap.nkill`)) as deaths_event >FROM indicators GROUP BY dt_country,`tomap.attack_type`,dt_year  ORDER BY deaths_event DESC) a LEFT >JOIN ( SELECT countries,lat,lon FROM countries) b on a.dt_country = b.countries;
+```
+the table is then loaded back in R 
+
+```{r echo = FALSE,warning= FALSE}
+mysql_1 <- read.csv("C:/Users/Vishesh Kakarala/Desktop/MySQL_1.csv", stringsAsFactors=FALSE)
+mysql_1$dt_country<- as.character(mysql_1$dt_country)
+mysql_1$lat<-as.numeric(mysql_1$lat)
+mysql_1$lon<-as.numeric(mysql_1$lon)
+mysql_1$killed<-as.numeric(mysql_1$killed)
+mysql_1$deaths_event <- as.numeric(mysql_1$deaths_event)
+
+head(mysql_1)
+```
+Now that we have the data for visualizations, the output is presented in the form an interactive web app using R's Shiny package
+
+UI snippet
+```{r eval = FALSE, warning= FALSE}
+fluidPage(navbarPage("Menu",
+                           tabPanel("Interactive Visualization",
+                                    h1("Interactive Visualization of Terrorist Attacks", align = "center"),
+                                    sidebarLayout
+                                    (
+                                    sidebarPanel 
+                                    (
+                                    "Select country",
+                                    selectInput("countryInput", "Country",countries, selected = "Iraq"),
+                                    "Select year",
+                                    selectInput("yearinput","Year",sort(unique(tomap$year)),selected = 2015),
+                                    "Select Attack type",
+                                    radioButtons("attacktype","Attack Type",attack_type)
+                                    ),
+                                    mainPanel 
+                                    ( 
+                                    leafletOutput("Output")
+                                    
+                                    )
+                                    )
+                           ),tabPanel("Interactive Summary",h1("Interactive Summary of Terrorist Attacks", align = "center"),
+                                      sidebarLayout
+                                      (
+                                      sidebarPanel 
+                                      (
+                                      "Select year",
+                                      selectInput("yearinput_1","Year",sort(unique(mysql_1$dt_year)),selected = 2015),
+                                      "Select Attack type",
+                                      radioButtons("attacktype_1","Attack Type",attack_type)
+                                      ),
+                                      mainPanel 
+                                      ( 
+                                      leafletOutput("Output_1")
+                                      
+                                      )
+                                      
+                                      )
+                           ),
+                           tabPanel("Timeline visualization - Year [1970-2015]",
+                                    imageOutput("myImage")
+                           ),
+                           tabPanel("Timeline visualization - Monthly [1970-2015]",
+                                    imageOutput("myImage1")
+                                    )
+                           
+)
+) 
+```
+
+Server snippet
+```{r eval = FALSE, warning= FALSE}
+server <- function(input, output, session) 
+{
+  
+  
+   output$Output <- renderLeaflet({
+    
+    leaflet(na.omit(tomap[tomap$year==input$yearinput[1] & tomap$country == input$countryInput[1]& tomap$attack_type == input$attacktype[1] ,]))%>%
+      
+      addCircles(lng = ~longitude, lat = ~latitude, weight = 1,
+                 radius = ~nkill, popup = ~popup
+      ) %>% 
+      addTiles()})
+  
+  output$Output_1 <- renderLeaflet({
+    
+    leaflet(na.omit(mysql_1[mysql_1$dt_year==input$yearinput_1[1] & mysql_1$tomap.attack_type == input$attacktype_1[1] ,]))%>%
+      
+      addCircles(lng = ~lon, lat = ~lat, weight = ~total_events/10,
+                 radius = ~deaths_event, popup = ~dt_country
+      ) %>% 
+      addTiles()})
+  
+  output$myImage <-renderImage({
+    filename <- normalizePath(file.path('./www',paste('out_year','.gif',sep='')))
+    list(src=filename)
+  }, deleteFile = FALSE)
+  output$myImage1 <-renderImage({
+    filename <- normalizePath(file.path('./www',paste('out','.gif',sep='')))
+    list(src=filename)
+  }, deleteFile = FALSE)
+  
+  
+  
+}
+  
+
+
+```
+ Using the shiny package in R the folowing web app was created to visualize the data
+ 
+ The web app is hosted at [visheshkakarala.shinyapps.io/app_final/](visheshkakarala.shinyapps.io/app_final/)
+
+
+
+```{r}
+
+
+joined <- read.csv("C:/Users/Vishesh Kakarala/Desktop/joined.csv",stringsAsFactors=FALSE)
+
+joined <- joined[,c(-1,-2)]
+
+
+joined[joined == "NULL"] = NA
+
+
+joined$tomap.nkill <-as.numeric(joined$tomap.nkill)
+joined$NY.GDP.PCAP.CD <-as.numeric(joined$NY.GDP.PCAP.CD)
+joined$NY.GNP.MKTP.CD <- as.numeric(joined$NY.GNP.MKTP.CD)
+joined$NY.GNS.ICTR.CD <- as.numeric(joined$NY.GNS.ICTR.CD)
+joined$NY.GSR.NFCY.CD<- as.numeric(joined$NY.GSR.NFCY.CD)
+joined$NY.GDS.TOTL.CD<- as.numeric(joined$NY.GDS.TOTL.CD)
+joined$NY.GDP.DEFL.KD.ZG<- as.numeric(joined$NY.GDP.DEFL.KD.ZG)
+joined$variable<-as.numeric(joined$variable)
+
+joined<-na.omit(joined)
+
+
+joined <- as.data.frame(joined)
+
+
+test <- lm(tomap.nkill ~NY.GDP.PCAP.CD+NY.GNP.MKTP.CD+NY.GNS.ICTR.CD+NY.GSR.NFCY.CD+NY.GDS.TOTL.CD+NY.GDP.DEFL.KD.ZG, data = joined)
+
+summary(test)
+
+
+
+#NY.GDP.PCAP.CD	GDP per capita (current US$)
+#NY.GNP.MKTP.CD	GNI (current US$)
+#NY.GNS.ICTR.CD	Gross savings (current US$)
+#NY.GSR.NFCY.CD	Net income from abroad (current US$)
+#NY.GDS.TOTL.CD	Gross domestic savings (current US$)
+#NY.GDP.DEFL.KD.ZG	Inflation, GDP deflator (annual %)
+```
+
+Resources:
+
+http://www.imagemagick.org/script/index.php
+https://www.r-bloggers.com/animated-plots-with-r/
+https://pakillo.github.io/R-GIS-tutorial/#vector
+https://www.r-bloggers.com/r-beginners-plotting-locations-on-to-a-world-map/
+https://www.washingtonpost.com/news/the-switch/wp/2016/07/10/how-artificial-intelligence-could-help-warn-us-of-another-dallas/
+http://databank.worldbank.org/data/reports.aspx?source=world-development-indicators
+National Consortium for the Study of Terrorism and Responses to Terrorism (START). (2013). 
+Global Terrorism Database [Data file]. Retrieved from http://www.start.umd.edu/gtd
+http://data.worldbank.org/topic/economy-and-growth
+
+ 
+
+
